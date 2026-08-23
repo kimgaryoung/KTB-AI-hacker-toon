@@ -1,0 +1,60 @@
+.moon-scale-wrap {
+  display: inline-block;
+  transform-origin: center;
+}
+
+.moon-orbit {
+  animation: float 6.5s ease-in-out infinite;
+}
+
+.moon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fff7ea, #f3d9b8 42%, #d9b98d 78%, #c4a172);
+  box-shadow: 0 0 46px 6px rgba(240, 217, 184, 0.28), inset -10px -10px 18px rgba(120, 90, 55, 0.35);
+  position: relative;
+  overflow: hidden;
+  animation: spin 34s linear infinite;
+}
+
+.moon::before,
+.moon::after,
+.moon i {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(120, 92, 58, 0.28);
+}
+.moon::before {
+  width: 11px;
+  height: 11px;
+  top: 10px;
+  left: 7px;
+}
+.moon::after {
+  width: 7px;
+  height: 7px;
+  top: 30px;
+  left: 32px;
+}
+.moon i {
+  width: 6px;
+  height: 6px;
+  top: 14px;
+  left: 34px;
+  display: block;
+}
+.moon i.b {
+  width: 9px;
+  height: 9px;
+  top: 37px;
+  left: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moon-orbit,
+  .moon {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,53 @@
+spring:
+  mongodb:
+    uri: mongodb://relationship_temperature:relationship_temperature@localhost:27017/relationship_temperature_chat_test?authSource=admin&uuidRepresentation=standard
+  data:
+    mongodb:
+      auto-index-creation: false
+  datasource:
+    url: jdbc:h2:mem:relationship_temperature_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: never
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: test-client-id
+            client-secret: test-client-secret
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/api/v1/auth/kakao/callback"
+            scope: profile_nickname
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+
+app:
+  frontend-base-url: http://localhost:5173
+  storage:
+    root: ./build/test-uploads
+  ai:
+    mode: stub
+    base-url: http://localhost:8000
+    service-token: test-token
+    timeout: 5s
+  upload:
+    max-bytes: 52428800
+    allowed-extensions: [txt, csv]
+  retention:
+    raw-conversation: 24h
+    cleanup-cron: "0 0 0 1 1 *"

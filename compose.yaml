@@ -1,0 +1,126 @@
+# 관계온도 로컬 실행 스택.
+#
+#   docker compose up -d --build      전체(DB + 백엔드 + AI + 프론트) 기동
+#   docker compose up -d postgres mongo   인프라만 (백엔드/프론트/AI는 호스트에서 실행)
+#
+# 카카오 키 같은 비밀값은 저장소 루트 .env 에서 읽는다 (`cp .env.example .env`).
+name: relationship-temperature
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: relationship_temperature
+      POSTGRES_USER: relationship_temperature
+      POSTGRES_PASSWORD: relationship_temperature
+    ports:
+      - "5432:5432"
+    volumes:
+      - relationship-temperature-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relationship_temperature -d relationship_temperature"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:
+    image: mongo:8
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: relationship_temperature
+      MONGO_INITDB_ROOT_PASSWORD: relationship_temperature
+      MONGO_INITDB_DATABASE: relationship_temperature
+    ports:
+      - "27017:27017"
+    volumes:
+      - relationship-temperature-mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      # 컨테이너 간 통신은 서비스 이름으로. (.env 의 localhost 값과 다르므로 여기서 덮어쓴다)
+      DB_URL: jdbc:postgresql://postgres:5432/relationship_temperature
+      DB_USERNAME: relationship_temperature
+      DB_PASSWORD: relationship_temperature
+      MONGODB_URI: mongodb://relationship_temperature:relationship_temperature@mongo:27017/relationship_temperature?authSource=admin&uuidRepresentation=standard
+      APP_STORAGE_ROOT: /app/data/uploads
+      # 아래 값들은 루트 .env 에서 주입된다. 없으면 괄호 뒤 기본값.
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-local-client-id}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-local-client-secret}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
+      AI_MODE: ${AI_MODE:-stub}
+      # ai 컨테이너와는 서비스 이름으로 통신한다.
+      AI_BASE_URL: ${AI_BASE_URL:-http://ai:8000}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-local-ai-token}
+      # 로컬은 http라 secure 쿠키를 쓰면 세션이 안 붙는다.
+      SESSION_COOKIE_SECURE: "false"
+      TZ: Asia/Seoul
+    ports:
+      - "8080:8080"
+    volumes:
+      - relationship-temperature-uploads:/app/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  # AI 분석 서버 (FastAPI, ./ai). 백엔드가 AI_MODE=http 일 때 호출하는 내부 서비스라
+  # 호스트 포트는 열지 않는다. 같은 저장소에 있으므로 항상 같이 뜬다.
+  # GOOGLE_API_KEY 가 없어도 컨테이너는 뜨지만 실제 LLM 분석 요청은 실패하므로,
+  # 키가 없을 때는 백엔드를 AI_MODE=stub 으로 두면 더미 결과로 전체 흐름을 볼 수 있다.
+  ai:
+    build:
+      context: ./ai
+    environment:
+      # 백엔드의 AI_SERVICE_TOKEN 과 같은 값이어야 인증이 통과된다. 변수 하나로 양쪽에 주입.
+      AI_INTERNAL_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-local-ai-token}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TZ: Asia/Seoul
+    healthcheck:
+      # 이미지에 curl 이 없으므로 파이썬 표준 라이브러리로 확인한다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  front:
+    build:
+      context: ./front
+      # 정적 빌드 + nginx로 띄우려면 target을 prod로 바꾸고 포트를 "5173:80" 으로.
+      target: dev
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      # vite dev 서버의 /api·/oauth2 프록시 대상.
+      BACKEND_ORIGIN: http://backend:8080
+      # bind mount에서 HMR이 동작하도록 폴링 사용.
+      VITE_USE_POLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./front:/app
+      # 컨테이너 안에서 설치한 node_modules가 호스트 마운트에 가려지지 않게 분리.
+      - relationship-temperature-front-node-modules:/app/node_modules
+
+volumes:
+  relationship-temperature-postgres:
+  relationship-temperature-mongo:
+  relationship-temperature-uploads:
+  relationship-temperature-front-node-modules:

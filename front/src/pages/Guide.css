@@ -1,0 +1,331 @@
+.guide-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 34px 44px 60px;
+}
+.guide-head {
+  margin-bottom: 26px;
+}
+.guide-title {
+  font-size: 22px;
+  font-weight: 800;
+}
+.guide-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.guide-section-title {
+  margin: 26px 0 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 10px;
+}
+.guide-step {
+  padding: 14px 18px;
+}
+.guide-step-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.guide-step-texts {
+  flex: 1;
+  min-width: 0;
+}
+.guide-step-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.guide-step-toggle svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.2s ease;
+}
+.guide-step-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.guide-step-toggle.open svg {
+  transform: rotate(180deg);
+}
+.guide-export-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.guide-export-step {
+  margin: 0;
+}
+.guide-export-step img {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.guide-export-step figcaption {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.guide-export-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.guide-step-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(226, 160, 201, 0.12);
+  color: var(--accent-pink);
+}
+.guide-step-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.guide-step-title {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.guide-step-desc {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.guide-videos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.guide-video-card {
+  padding: 16px;
+}
+.guide-video,
+.guide-video-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.guide-video-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+}
+.guide-video-placeholder-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(226, 160, 201, 0.14);
+  color: var(--accent-pink);
+  font-size: 12px;
+  padding-left: 2px;
+}
+.guide-video-tag {
+  display: inline-block;
+  margin-top: 12px;
+}
+.guide-video-title {
+  margin-top: 8px;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.guide-video-desc {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .guide-shell {
+    padding: 22px 16px 48px;
+  }
+  .guide-videos {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== 실시간 렌더링 데모 플레이어 ===== */
+.guide-demo {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+}
+.guide-demo-scale {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 843px;
+  height: 517px;
+  transform-origin: 0 0;
+}
+.guide-demo .intro-app {
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+.guide-demo-caption {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 3;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: rgba(10, 6, 30, 0.75);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  animation: gkIn 0.3s ease both;
+}
+.guide-demo-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.guide-demo-poster:hover {
+  color: var(--text-primary);
+}
+
+/* 카카오톡 데모 메시지 등장 */
+.gk-in {
+  opacity: 0;
+  animation: gkIn 0.4s ease both;
+}
+@keyframes gkIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 데모가 크게 보이도록 예시 카드를 한 줄에 하나씩 */
+.guide-videos {
+  grid-template-columns: 1fr;
+}
+
+/* 마무리 카톡: 이전 대화를 위에 깔고 새 메시지가 아래에 이어진다 */
+.gk-scroll-bottom {
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.gk-history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  opacity: 0.55;
+}
+
+/* 포스터(재생 전 미리보기)가 있을 때: 대화 화면 위에 어두운 스크림 + 픽셀 재생 버튼 */
+.guide-demo-poster.has-preview {
+  border: none;
+  background: rgba(8, 5, 24, 0.42);
+  z-index: 2;
+}
+.guide-demo-poster.has-preview:hover {
+  background: rgba(8, 5, 24, 0.3);
+}
+
+/* 픽셀 스타일 재생 버튼 */
+.pixel-play-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 18px;
+  background: var(--surface-solid);
+  border: 2px solid var(--accent-pink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+  color: var(--accent-pink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease,
+    color 0.12s ease;
+}
+.pixel-play-chip svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.guide-demo-poster:hover .pixel-play-chip {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+  background: var(--accent-pink);
+  color: var(--accent-pink-ink);
+}
+
+/* 내보내기 단계: 1행 ①~③, 2행 ④~⑤ */
+.guide-export-steps {
+  grid-template-columns: repeat(6, 1fr);
+}
+.guide-export-step {
+  grid-column: span 2;
+}
+.guide-export-step:nth-of-type(4),
+.guide-export-step:nth-of-type(5) {
+  grid-column: span 3;
+}
+@media (max-width: 768px) {
+  .guide-export-steps {
+    grid-template-columns: 1fr;
+  }
+  .guide-export-step,
+  .guide-export-step:nth-of-type(4),
+  .guide-export-step:nth-of-type(5) {
+    grid-column: auto;
+  }
+}

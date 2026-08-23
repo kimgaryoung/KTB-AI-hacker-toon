@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: relationship-temperature-api
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://relationship_temperature:relationship_temperature@localhost:27017/relationship_temperature?authSource=admin&uuidRepresentation=standard}
+  data:
+    mongodb:
+      auto-index-creation: true
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:relationship_temperature;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+  session:
+    store-type: jdbc
+    jdbc:
+      initialize-schema: never
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 51MB
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID:local-client-id}
+            client-secret: ${KAKAO_CLIENT_SECRET:local-client-secret}
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/api/v1/auth/kakao/callback"
+            scope: profile_nickname,profile_image
+            client-name: Kakao
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+
+server:
+  shutdown: graceful
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 12h
+      cookie:
+        name: rt_session
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+logging:
+  level:
+    root: INFO
+    com.relationshiptemperature.api: INFO
+    org.hibernate.SQL: WARN
+
+app:
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  storage:
+    root: ${APP_STORAGE_ROOT:./data/uploads}
+  ai:
+    mode: ${AI_MODE:stub}
+    base-url: ${AI_BASE_URL:http://localhost:8000}
+    service-token: ${AI_SERVICE_TOKEN:local-ai-token}
+    timeout: ${AI_TIMEOUT:90s}
+  upload:
+    max-bytes: 52428800
+    allowed-extensions: [txt, csv]
+  retention:
+    raw-conversation: ${RAW_CONVERSATION_RETENTION:24h}
+    cleanup-cron: ${RETENTION_CLEANUP_CRON:0 15 * * * *}

@@ -1,0 +1,8 @@
+.gradle/
+build/
+out/
+data/
+logs/
+tmp/
+*.iml
+.idea/

@@ -1,0 +1,928 @@
+openapi: 3.1.0
+info:
+  title: 관계온도 백엔드-AI 내부 API
+  version: 1.0.0
+  summary: PRQC 분석 및 관계 리포트 기반 AI 상담 계약
+  description: |
+    Backend Worker가 AI 서버에 정규화된 1:1 대화를 전달하고 PRQC 6개 구성요소와
+    구조화 근거를 한 번에 받는 내부 API다. 프론트엔드는 호출하지 않는다.
+
+    AI 서버는 공개 AnalysisJob, 단계별 진행률, 웹훅, canonical
+    overall.score 계산을 담당하지 않는다. Backend Worker가 AI 결과에 버전된
+    관계 유형별 가중치를 적용해 최종 종합점수를 계산한다.
+servers:
+  - url: /internal/v1
+    description: Private network internal API
+tags:
+  - name: PRQC Analyses
+  - name: Consultation Answers
+security:
+  - serviceBearer: []
+paths:
+  /prqc-analyses:
+    post:
+      tags: [PRQC Analyses]
+      operationId: analyzePrqc
+      summary: 정규화 대화를 동기 분석
+      description: |
+        현재 백엔드 HTTP 클라이언트는 multipart/form-data로 분석 메타데이터,
+        사용자·관계·체크인·과거 분석 context JSON, gzip NDJSON 대화 파일을 한 번에 전송한다.
+        CSV/TXT 원본이 아니라 백엔드가 파싱·검증·중복 제거 후 해당 conversationFileId에
+        저장한 정규화 메시지를 전송한다. 사용자가 기존 대화가 포함된 확장 export를 다시
+        업로드한 경우 file 파트에는 새로 저장된 메시지만 들어갈 수 있으며, 이전 분석 대화와
+        점수는 context.history로 전달한다.
+        application/json의 Presigned URL 방식은 Object Storage 연동 시 사용할 수 있는
+        대체 계약이다. AI 서버는 단계별 진행률이나 콜백 없이 최종 결과를 동기 반환한다.
+        권장 호출 타임아웃은 60~120초이며 예상 처리 시간은 20~30초다.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ObjectReferenceAnalysisRequest"
+            examples:
+              objectReference:
+                value:
+                  analysisId: 0198c8a7-3000-7000-8000-000000000001
+                  relationshipType: FRIEND
+                  context:
+                    user:
+                      userId: 0198c8a7-3000-7000-8000-000000000002
+                      displayName: 우
+                      timezone: Asia/Seoul
+                    relationship:
+                      relationshipId: 0198c8a7-3000-7000-8000-000000000003
+                      name: 민지
+                      relationshipType: FRIEND
+                      status: ANALYZING
+                    current:
+                      conversationFileId: 0198c8a7-3000-7000-8000-000000000004
+                      checkIn:
+                        checkInId: 0198c8a7-3000-7000-8000-000000000005
+                        weekStart: "2026-08-17"
+                        inputAt: "2026-08-17T01:00:00Z"
+                        answers:
+                          - questionCode: RELATIONSHIP_FEELING
+                            score: 6
+                          - questionCode: CONVERSATION_COMFORT
+                            score: 4
+                    history:
+                      - inputAt: "2026-08-10T01:00:00Z"
+                        conversation:
+                          conversationFileId: 0198c8a7-3000-7000-8000-000000000006
+                          messages:
+                            - sender: SELF
+                              sentAt: "2026-08-09T12:00:00Z"
+                              text: 지난 대화 내용
+                        checkIn:
+                          checkInId: 0198c8a7-3000-7000-8000-000000000007
+                          weekStart: "2026-08-10"
+                          inputAt: "2026-08-10T01:00:00Z"
+                          answers:
+                            - questionCode: RELATIONSHIP_FEELING
+                              score: 4
+                            - questionCode: CONVERSATION_COMFORT
+                              score: 5
+                        analysis:
+                          reportId: 0198c8a7-3000-7000-8000-000000000008
+                          analyzedAt: "2026-08-10T01:02:00Z"
+                          overallScore: 58
+                          scoreChange: -7
+                          prqc:
+                            satisfaction: 55
+                            commitment: 56
+                            intimacy: 57
+                            trust: 58
+                            passion: 59
+                            love: 60
+                          evidences:
+                            - component: trust
+                              score: 58
+                              summary: 응답 간격이 길어졌어요.
+                              metric: null
+                  conversation:
+                    url: https://storage.example.com/private/conversation?signature=redacted
+                    format: NORMALIZED_NDJSON_GZIP
+                    formatVersion: conversation-ndjson-1.0.0
+                    contentEncoding: gzip
+                    sizeBytes: 4821941
+                    sha256: a878d8f81f41f32c7d1a4748f35e92318f367689632be2f3c9d662e705c4ec9d
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/MultipartAnalysisRequest"
+            encoding:
+              file:
+                contentType: application/gzip
+              context:
+                contentType: application/json
+            examples:
+              backendMultipart:
+                summary: 현재 백엔드 HTTP 클라이언트가 전송하는 multipart 요청
+                value:
+                  analysisId: 0198c8a7-3000-7000-8000-000000000001
+                  relationshipType: FRIEND
+                  format: NORMALIZED_NDJSON_GZIP
+                  formatVersion: conversation-ndjson-1.0.0
+                  sha256: a878d8f81f41f32c7d1a4748f35e92318f367689632be2f3c9d662e705c4ec9d
+                  context:
+                    user:
+                      userId: 0198c8a7-3000-7000-8000-000000000002
+                      displayName: 우
+                      timezone: Asia/Seoul
+                    relationship:
+                      relationshipId: 0198c8a7-3000-7000-8000-000000000003
+                      name: 민지
+                      relationshipType: FRIEND
+                      status: ANALYZING
+                    current:
+                      conversationFileId: 0198c8a7-3000-7000-8000-000000000004
+                      checkIn:
+                        checkInId: 0198c8a7-3000-7000-8000-000000000005
+                        weekStart: "2026-08-17"
+                        inputAt: "2026-08-17T01:00:00Z"
+                        answers:
+                          - questionCode: RELATIONSHIP_FEELING
+                            score: 6
+                          - questionCode: CONVERSATION_COMFORT
+                            score: 4
+                    history:
+                      - inputAt: "2026-08-10T01:00:00Z"
+                        conversation:
+                          conversationFileId: 0198c8a7-3000-7000-8000-000000000006
+                          messages:
+                            - sender: SELF
+                              sentAt: "2026-08-09T12:00:00Z"
+                              text: 지난 대화 내용
+                        checkIn:
+                          checkInId: 0198c8a7-3000-7000-8000-000000000007
+                          weekStart: "2026-08-10"
+                          inputAt: "2026-08-10T01:00:00Z"
+                          answers:
+                            - questionCode: RELATIONSHIP_FEELING
+                              score: 4
+                            - questionCode: CONVERSATION_COMFORT
+                              score: 5
+                        analysis:
+                          reportId: 0198c8a7-3000-7000-8000-000000000008
+                          analyzedAt: "2026-08-10T01:02:00Z"
+                          overallScore: 58
+                          scoreChange: -7
+                          prqc:
+                            satisfaction: 55
+                            commitment: 56
+                            intimacy: 57
+                            trust: 58
+                            passion: 59
+                            love: 60
+                          evidences:
+                            - component: trust
+                              score: 58
+                              summary: 응답 간격이 길어졌어요.
+                              metric: null
+                  file: conversation.ndjson.gz
+      responses:
+        "200":
+          description: PRQC 분석 완료
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrqcAnalysisResponse"
+              examples:
+                success:
+                  value:
+                    analysisId: 0198c8a7-3000-7000-8000-000000000001
+                    modelVersion: prqc-2026-08-19.1
+                    promptVersion: relationship-evidence-1.0.0
+                    processedMessageCount: 8421
+                    components:
+                      satisfaction: 55
+                      commitment: 45
+                      intimacy: 68
+                      trust: 72
+                      passion: 40
+                      love: 58
+                    evidences:
+                      - component: passion
+                        score: 40
+                        summary: 최근 한 달간 대화 빈도가 감소한 것이 관찰됐어요.
+                        metric:
+                          name: weeklyConversationCount
+                          currentValue: 1.1
+                          previousValue: 3.2
+                          unit: 회/주
+                          period: 최근 4주와 이전 4주 비교
+                    warnings: []
+                    completedAt: "2026-08-19T06:22:24Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ConversationNotAccessible"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+  /consultation-answers:
+    post:
+      tags: [Consultation Answers]
+      operationId: createConsultationAnswer
+      summary: 관계 리포트 컨텍스트 기반 AI 상담 답변 생성
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsultationAnswerRequest"
+      responses:
+        "200":
+          description: 구조화 AI 상담 답변
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsultationAnswerResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/GatewayTimeout"
+components:
+  securitySchemes:
+    serviceBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: service-token
+      description: 백엔드 Worker 전용 서비스 자격증명
+
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: true
+      description: 백엔드 공개 요청부터 이어지는 분산 추적 ID
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 요청 본문의 analysisId와 같은 UUID
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: 필수 필드, 형식값 또는 해시 오류. 재시도하지 않는다.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    Unauthorized:
+      description: 서비스 토큰이 없거나 유효하지 않음
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    Forbidden:
+      description: 서비스 토큰에 분석 호출 권한이 없음
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    ConversationNotAccessible:
+      description: Presigned URL의 대화 파일을 조회할 수 없음
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    Conflict:
+      description: 같은 멱등성 키에 다른 요청 본문이 사용됨
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    UnprocessableEntity:
+      description: 메시지 부족 또는 정규화 대화 데이터 분석 불가
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    TooManyRequests:
+      description: AI 호출량 제한. 백엔드가 Retry-After 이후 재시도할 수 있음.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    InternalError:
+      description: 예상하지 못한 AI 내부 오류
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    ServiceUnavailable:
+      description: 모델 또는 외부 AI 공급자 일시 장애. 재시도 가능.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+    GatewayTimeout:
+      description: AI 분석 시간 초과. 재시도 가능.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InternalErrorEnvelope"
+
+  schemas:
+    RelationshipType:
+      type: string
+      enum: [ROMANTIC_PARTNER, FRIEND, FAMILY, COWORKER, OTHER]
+    Score:
+      type: integer
+      minimum: 0
+      maximum: 100
+    Sha256:
+      type: string
+      pattern: ^[a-f0-9]{64}$
+      description: 소문자 16진수 SHA-256
+    ConversationFormat:
+      type: string
+      const: NORMALIZED_NDJSON_GZIP
+    FormatVersion:
+      type: string
+      pattern: ^conversation-ndjson-[0-9]+\.[0-9]+\.[0-9]+$
+      example: conversation-ndjson-1.0.0
+    ObjectConversationReference:
+      type: object
+      additionalProperties: false
+      required:
+        - url
+        - format
+        - formatVersion
+        - contentEncoding
+        - sizeBytes
+        - sha256
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+          description: 다운로드 전용 5~15분 만료 Presigned URL
+        format:
+          $ref: "#/components/schemas/ConversationFormat"
+        formatVersion:
+          $ref: "#/components/schemas/FormatVersion"
+        contentEncoding:
+          type: string
+          const: gzip
+        sizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 104857600
+          description: 정규화 gzip 결과 크기. MVP 내부 상한 100MB.
+        sha256:
+          $ref: "#/components/schemas/Sha256"
+    ObjectReferenceAnalysisRequest:
+      type: object
+      additionalProperties: false
+      required: [analysisId, relationshipType, context, conversation]
+      properties:
+        analysisId:
+          type: string
+          format: uuid
+          description: Idempotency-Key와 동일해야 함
+        relationshipType:
+          $ref: "#/components/schemas/RelationshipType"
+        context:
+          $ref: "#/components/schemas/AnalysisContext"
+        conversation:
+          $ref: "#/components/schemas/ObjectConversationReference"
+    MultipartAnalysisRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        백엔드의 현재 HTTP 분석 요청 형식. CSV 원본이 아니라 서버에서 파싱한 메시지를
+        `messageId`, `sender`, `sentAt`, `text` 필드의 NDJSON으로 직렬화한 뒤 gzip으로
+        압축해 file 파트에 담는다. 같은 관계에 이미 저장된 메시지는 업로드 시 제외되므로,
+        확장 export 재업로드 분석에서는 file 파트가 새 메시지 구간만 담을 수 있다.
+        context 파트는 application/json으로 전송한다.
+      required:
+        - analysisId
+        - relationshipType
+        - context
+        - format
+        - formatVersion
+        - sha256
+        - file
+      properties:
+        analysisId:
+          type: string
+          format: uuid
+          description: Idempotency-Key와 동일해야 함
+        relationshipType:
+          $ref: "#/components/schemas/RelationshipType"
+        context:
+          $ref: "#/components/schemas/AnalysisContext"
+        format:
+          $ref: "#/components/schemas/ConversationFormat"
+        formatVersion:
+          $ref: "#/components/schemas/FormatVersion"
+        sha256:
+          $ref: "#/components/schemas/Sha256"
+        file:
+          type: string
+          format: binary
+          description: gzip으로 압축한 정규화 NDJSON
+    AnalysisContext:
+      type: object
+      additionalProperties: false
+      description: |
+        현재 분석 스냅샷과 과거 분석 이력을 전달하는 맥락이다. 현재 분석 대상
+        conversationFileId에 저장된 정규화 메시지는 multipart file 또는 conversation 참조에
+        담고, history는 이전 성공 분석의 대화·체크인·점수·근거를 check-in 입력 시각
+        inputAt 오름차순으로 전달한다.
+      required: [user, relationship, current, history]
+      properties:
+        user:
+          $ref: "#/components/schemas/AnalysisUserContext"
+        relationship:
+          $ref: "#/components/schemas/AnalysisRelationshipContext"
+        current:
+          $ref: "#/components/schemas/CurrentAnalysisContext"
+        history:
+          type: array
+          description: 현재 체크인보다 이전인 성공 분석 이력. 오래된 입력부터 정렬한다.
+          items:
+            $ref: "#/components/schemas/HistoricalAnalysisContext"
+    AnalysisUserContext:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, timezone]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 50
+    AnalysisRelationshipContext:
+      type: object
+      additionalProperties: false
+      required: [relationshipId, name, relationshipType, status]
+      properties:
+        relationshipId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        relationshipType:
+          $ref: "#/components/schemas/RelationshipType"
+        status:
+          type: string
+          description: 분석 요청 시점의 관계 상태
+    AnalysisCheckInContext:
+      type: object
+      additionalProperties: false
+      required: [checkInId, weekStart, inputAt, answers]
+      properties:
+        checkInId:
+          type: string
+          format: uuid
+        weekStart:
+          type: string
+          format: date
+        inputAt:
+          type: string
+          format: date-time
+          description: 사용자가 이 체크인 점수를 최초 입력한 시각
+        answers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CheckInAnswerContext"
+    CurrentAnalysisContext:
+      type: object
+      additionalProperties: false
+      required: [conversationFileId, checkIn]
+      properties:
+        conversationFileId:
+          type: string
+          format: uuid
+          description: multipart file 또는 conversation 참조로 전달한 현재 저장 메시지 묶음의 식별자
+        checkIn:
+          $ref: "#/components/schemas/AnalysisCheckInContext"
+    HistoricalAnalysisContext:
+      type: object
+      additionalProperties: false
+      required: [inputAt, conversation, checkIn, analysis]
+      properties:
+        inputAt:
+          type: string
+          format: date-time
+          description: 과거 체크인 최초 입력 시각. history 정렬의 기준값
+        conversation:
+          $ref: "#/components/schemas/HistoricalConversationContext"
+        checkIn:
+          $ref: "#/components/schemas/AnalysisCheckInContext"
+        analysis:
+          $ref: "#/components/schemas/PreviousAnalysisContext"
+    HistoricalConversationContext:
+      type: object
+      additionalProperties: false
+      required: [conversationFileId, messages]
+      properties:
+        conversationFileId:
+          type: string
+          format: uuid
+        messages:
+          type: array
+          description: 해당 이전 분석에서 사용한 conversationFileId의 정규화 메시지
+          items:
+            $ref: "#/components/schemas/HistoricalConversationMessage"
+    HistoricalConversationMessage:
+      type: object
+      additionalProperties: false
+      required: [sender, sentAt, text]
+      properties:
+        sender:
+          type: string
+          enum: [SELF, OTHER]
+        sentAt:
+          type: string
+          format: date-time
+        text:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    PreviousAnalysisContext:
+      type: object
+      additionalProperties: false
+      required: [reportId, analyzedAt, overallScore, scoreChange, prqc, evidences]
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        analyzedAt:
+          type: string
+          format: date-time
+        overallScore:
+          $ref: "#/components/schemas/Score"
+        scoreChange:
+          type: [integer, "null"]
+          minimum: -100
+          maximum: 100
+        prqc:
+          $ref: "#/components/schemas/PrqcComponents"
+        evidences:
+          type: array
+          description: 이전 AI 분석 글로 사용하는 저장 근거 문장
+          minItems: 1
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/Evidence"
+    CheckInAnswerContext:
+      type: object
+      additionalProperties: false
+      required: [questionCode, score]
+      properties:
+        questionCode:
+          type: string
+          enum: [RELATIONSHIP_FEELING, CONVERSATION_COMFORT]
+        score:
+          type: integer
+          minimum: 1
+          maximum: 7
+    PrqcComponents:
+      type: object
+      additionalProperties: false
+      required: [satisfaction, commitment, intimacy, trust, passion, love]
+      properties:
+        satisfaction:
+          $ref: "#/components/schemas/Score"
+        commitment:
+          $ref: "#/components/schemas/Score"
+        intimacy:
+          $ref: "#/components/schemas/Score"
+        trust:
+          $ref: "#/components/schemas/Score"
+        passion:
+          $ref: "#/components/schemas/Score"
+        love:
+          $ref: "#/components/schemas/Score"
+    EvidenceMetric:
+      type: object
+      additionalProperties: false
+      required: [name, currentValue, previousValue, unit, period]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        currentValue:
+          type: number
+        previousValue:
+          type: [number, "null"]
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 30
+        period:
+          type: string
+          minLength: 1
+          maxLength: 100
+    Evidence:
+      type: object
+      additionalProperties: false
+      required: [component, score, summary, metric]
+      properties:
+        component:
+          type: string
+          enum: [satisfaction, commitment, intimacy, trust, passion, love]
+        score:
+          $ref: "#/components/schemas/Score"
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        metric:
+          oneOf:
+            - $ref: "#/components/schemas/EvidenceMetric"
+            - type: "null"
+    AnalysisWarning:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - LIMITED_DATE_RANGE
+            - LOW_MESSAGE_COUNT
+            - NO_STRUCTURED_EVIDENCE
+            - PARTIAL_ANALYSIS
+        message:
+          type: string
+          maxLength: 500
+    PrqcAnalysisResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - analysisId
+        - modelVersion
+        - processedMessageCount
+        - components
+        - evidences
+        - warnings
+        - selfReportComparison
+        - completedAt
+      properties:
+        analysisId:
+          type: string
+          format: uuid
+        modelVersion:
+          type: string
+          pattern: ^prqc-[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]+$
+          example: prqc-2026-08-19.1
+        promptVersion:
+          type: [string, "null"]
+          pattern: ^relationship-evidence-[0-9]+\.[0-9]+\.[0-9]+$
+          example: relationship-evidence-1.0.0
+        processedMessageCount:
+          type: integer
+          minimum: 0
+        components:
+          $ref: "#/components/schemas/PrqcComponents"
+        evidences:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/Evidence"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalysisWarning"
+        selfReportComparison:
+          type: string
+          maxLength: 2000
+          description: 사용자 체크인 자기보고와 대화에서 관찰된 PRQC 신호의 일치·차이를 설명하는 문구
+        completedAt:
+          type: string
+          format: date-time
+    ConsultationEvidenceContext:
+      type: object
+      additionalProperties: false
+      required: [evidenceId, component, score, summary]
+      properties:
+        evidenceId:
+          type: string
+          format: uuid
+        component:
+          type: string
+          enum: [satisfaction, commitment, intimacy, trust, passion, love]
+        score:
+          $ref: "#/components/schemas/Score"
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    ConsultationHistoryMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [USER, ASSISTANT]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    ConsultationAnswerRequest:
+      type: object
+      additionalProperties: false
+      required: [reportId, overallScore, prqc, evidences, recentMessages, conversationMessages, userMessage]
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        overallScore:
+          $ref: "#/components/schemas/Score"
+        scoreChange:
+          type: [integer, "null"]
+          minimum: -100
+          maximum: 100
+        prqc:
+          $ref: "#/components/schemas/PrqcComponents"
+        evidences:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/ConsultationEvidenceContext"
+        recentMessages:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ConsultationHistoryMessage"
+        conversationMessages:
+          type: array
+          description: 업로드된 CSV/TXT에서 파싱한 관계 대화 원문 전체
+          items:
+            $ref: "#/components/schemas/ConsultationConversationMessage"
+        userMessage:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    ConsultationConversationMessage:
+      type: object
+      additionalProperties: false
+      required: [sender, sentAt, text]
+      properties:
+        sender:
+          type: string
+          enum: [SELF, OTHER]
+        sentAt:
+          type: string
+          format: date-time
+        text:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    ConsultationEvidenceReference:
+      type: object
+      additionalProperties: false
+      required: [evidenceId, label]
+      properties:
+        evidenceId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+    ConsultationResourceQuery:
+      type: object
+      additionalProperties: false
+      required: [category, region]
+      properties:
+        category:
+          type: string
+          enum: [MENTAL_HEALTH_COUNSELING, RELATIONSHIP_COUNSELING, CRISIS_SUPPORT]
+        region:
+          type: string
+          const: KR
+    ConsultationSafetyNotice:
+      type: object
+      additionalProperties: false
+      required: [type, title, message, resourceQuery]
+      properties:
+        type:
+          type: string
+          enum: [SUPPORT_RECOMMENDATION, CRISIS_SUPPORT]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        resourceQuery:
+          $ref: "#/components/schemas/ConsultationResourceQuery"
+    ConsultationAnswerResponse:
+      type: object
+      additionalProperties: false
+      required: [content, evidenceRefs, safetyNotice]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        evidenceRefs:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/ConsultationEvidenceReference"
+        safetyNotice:
+          oneOf:
+            - $ref: "#/components/schemas/ConsultationSafetyNotice"
+            - type: "null"
+    InternalErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable, requestId, details]
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - AUTH_REQUIRED
+            - FORBIDDEN
+            - CONVERSATION_NOT_ACCESSIBLE
+            - IDEMPOTENCY_KEY_REUSED
+            - INSUFFICIENT_MESSAGES
+            - INVALID_CONVERSATION_DATA
+            - AI_RATE_LIMITED
+            - AI_INTERNAL_ERROR
+            - AI_PROVIDER_UNAVAILABLE
+            - AI_TIMEOUT
+        message:
+          type: string
+          maxLength: 500
+        retryable:
+          type: boolean
+        requestId:
+          type: string
+        details:
+          type: [object, "null"]
+          additionalProperties: true
+          description: 원문, URL, 토큰, 프롬프트, 공급자 응답은 포함하지 않음
+    InternalErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/InternalErrorDetail"

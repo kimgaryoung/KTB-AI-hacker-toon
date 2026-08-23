@@ -1,0 +1,30 @@
+.gradle/
+build/
+out/
+.idea/
+*.iml
+.DS_Store
+.env
+data/
+uploads/
+logs/
+tmp/
+.claude/
+# 프론트엔드(front/)는 이 저장소에서 함께 관리한다. 의존성·빌드 산출물만 제외한다.
+/frontend/
+front/node_modules/
+front/dist/
+front/.vite/
+# 위 data/ 규칙은 백엔드 런타임 업로드 디렉토리용이라 front/src/data 소스 폴더는 제외 대상에서 뺀다.
+!front/src/data/
+
+# Let's Encrypt 발급물 (인증서·개인키). 절대 커밋하지 않는다.
+deploy/certbot/
+
+# AI 서버(ai/) 파이썬 산출물
+ai/.venv/
+ai/.venv-*/
+ai/__pycache__/
+ai/**/__pycache__/
+ai/*.pyc
+ai/.pytest_cache/

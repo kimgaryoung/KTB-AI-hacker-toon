@@ -1,0 +1,78 @@
+# EC2 1대에 컨테이너 5개(front·backend·ai·postgres·mongo)를 올리는 배포 오버레이.
+#
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#
+# 개발용 compose.yaml 과의 차이:
+#   - 외부에 열리는 포트는 front(nginx)의 80/443 뿐. DB와 백엔드는 컨테이너 네트워크 안에만 존재.
+#   - front가 vite dev 서버가 아니라 정적 빌드 + nginx (build target: prod).
+#   - 모든 서비스 restart: unless-stopped (인스턴스 재부팅 후 자동 복구).
+#
+# 도메인/비밀값은 서버의 .env 에서 읽는다. .env.prod.example 참고.
+
+# 메모리 제한은 t3.medium(4GB) 기준. t3.small(2GB)이면 .env 에서 줄인다.
+#   BACKEND_MEM=900m MONGO_MEM=600m POSTGRES_MEM=256m FRONT_MEM=64m AI_MEM=256m
+# 백엔드 JVM은 -XX:MaxRAMPercentage=75 라서, 제한이 없으면 호스트 RAM의 75%를
+# 힙으로 잡아 다른 컨테이너를 굶긴다. mem_limit 이 반드시 있어야 한다.
+
+services:
+  postgres:
+    # 외부 노출 금지. 접속은 docker compose exec 로.
+    ports: !reset []
+    restart: unless-stopped
+    mem_limit: ${POSTGRES_MEM:-512m}
+
+  mongo:
+    ports: !reset []
+    restart: unless-stopped
+    mem_limit: ${MONGO_MEM:-1g}
+
+  backend:
+    # nginx가 프록시하므로 8080을 호스트에 뚫지 않는다.
+    ports: !reset []
+    restart: unless-stopped
+    mem_limit: ${BACKEND_MEM:-1500m}
+    environment:
+      # 로그인 성공 후 돌아갈 주소. 실제 접속 오리진과 정확히 같아야 한다
+      # (OAuthRedirectUriValidator가 scheme·host·port로 same-origin 검사).
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL을 .env에 설정하세요}
+      # https로 서비스하면 true. http면 반드시 false여야 세션이 붙는다.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+
+  ai:
+    restart: unless-stopped
+    mem_limit: ${AI_MEM:-384m}
+    environment:
+      # LLM(Gemini) 호출에 필수. 없으면 분석 요청이 전부 실패하므로 기동 전에 잡는다.
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?GOOGLE_API_KEY를 .env에 설정하세요}
+
+  front:
+    # dev 빌드(vite)와 이미지 태그가 겹치면 --build 없이 스택을 바꿀 때
+    # 엉뚱한 이미지가 뜬다. prod 전용 태그로 분리한다.
+    image: relationship-temperature-front:prod
+    build:
+      target: prod
+    restart: unless-stopped
+    mem_limit: ${FRONT_MEM:-128m}
+    ports: !override
+      # ALB(ACM)가 TLS를 종료하므로 EC2는 80만 받는다.
+      # EC2에서 직접 TLS를 종료하는 구성이라면 아래 443 주석을 풀고
+      # NGINX_CONF=nginx.tls.conf 로 전환한다.
+      - "80:80"
+      # - "443:443"
+    # dev용 bind mount / node_modules 볼륨을 걷어낸다.
+    environment: !reset null
+    volumes: !override
+      # 인증서 발급 전에는 nginx.conf(HTTP), 발급 후에는 nginx.tls.conf.
+      - ./front/${NGINX_CONF:-nginx.conf}:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
+
+  # 인증서 발급/갱신 전용. 평소에는 뜨지 않는다 (profiles).
+  #   발급: ./deploy/init-letsencrypt.sh
+  #   갱신: docker compose -f compose.yaml -f compose.prod.yaml --profile certbot run --rm certbot renew
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["certbot"]
+    volumes:
+      - ./deploy/certbot/conf:/etc/letsencrypt
+      - ./deploy/certbot/www:/var/www/certbot
