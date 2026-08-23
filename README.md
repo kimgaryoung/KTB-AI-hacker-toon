@@ -120,7 +120,7 @@ docker compose로 Spring · MongoDB · PostgreSQL을 세팅하고, 카카오 개
 4. HTTPS를 위해 ACM이 필요하고, ACM 인증서를 붙이기 위해 ALB 도입
 5. `backend_team` / `AI_Team` 두 저장소로 나뉘어 있던 것을 하나의 모노레포로 합치고 `docker compose up` 한 번에 5개 서비스가 뜨도록 정리
 
-상세 절차(ACM · 보안 그룹 · 대상 그룹 · ALB · Route53 · 검증 체크리스트)는 **[DEPLOYMENT.md](./DEPLOYMENT.md)** 에 있습니다.
+![architecture](docs/architecture.png)
 
 ### 3. DB 스키마 변경 후 마이그레이션 — Flyway
 
