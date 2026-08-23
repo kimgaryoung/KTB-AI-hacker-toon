@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" alt="WouldU" width="320">
+  <img src="docs/logo-banner.png" alt="WouldU" width="420">
 </p>
 
 <h1 align="center">WouldU — 끝없는 관계의 우주 속, 당신에게</h1>
@@ -34,10 +34,17 @@
 
 ## 동작 영상
 
-| 로그인 → 대시보드 | 인물 등록 → 관계 리포트 → AI 상담 | 사용 가이드 |
-|---|---|---|
-| ![intro-login](docs/demo/01-intro-login.gif) | ![report-chat](docs/demo/02-report-chat.gif) | ![guide](docs/demo/03-guide.gif) |
-| [mp4](docs/demo/01-intro-login.mp4) | [mp4](docs/demo/02-report-chat.mp4) | [mp4](docs/demo/03-guide.mp4) |
+**1. 로그인 → 대시보드** ([mp4](docs/demo/01-intro-login.mp4))
+
+![intro-login](docs/demo/01-intro-login.gif)
+
+**2. 인물 등록 → 관계 리포트 → AI 상담** ([mp4](docs/demo/02-report-chat.mp4))
+
+![report-chat](docs/demo/02-report-chat.gif)
+
+**3. 사용 가이드** ([mp4](docs/demo/03-guide.mp4))
+
+![guide](docs/demo/03-guide.gif)
 
 ## 핵심 기능
 
