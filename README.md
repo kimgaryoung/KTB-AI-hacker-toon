@@ -63,7 +63,7 @@
 - Infra : AWS EC2 · ALB · ACM · Route53 · Docker Compose (단일 인스턴스)
 
 ```mermaid
-flowchart LR
+flowchart TB
     U[사용자] -- HTTPS --> R53[Route53] --> ALB[ALB<br/>ACM TLS 종료 · 경로 라우팅]
     ALB -- HTTP :80 --> FE
 
@@ -120,19 +120,82 @@ docker compose로 Spring · MongoDB · PostgreSQL을 세팅하고, 카카오 개
 4. HTTPS를 위해 ACM이 필요하고, ACM 인증서를 붙이기 위해 ALB 도입
 5. `backend_team` / `AI_Team` 두 저장소로 나뉘어 있던 것을 하나의 모노레포로 합치고 `docker compose up` 한 번에 5개 서비스가 뜨도록 정리
 
-![architecture](docs/architecture.png)
+<p align="center"><img src="docs/architecture.svg" alt="architecture" width="720"></p>
 
 ### 3. DB 스키마 변경 후 마이그레이션 — Flyway
 
-해커톤 중 스키마가 계속 바뀌어서(V1 → V9) 팀원 각자의 DB와 운영 DB를 같은 상태로 맞출 방법이 필요했습니다.
+해커톤 중 스키마가 계속 바뀌어서(V1 → V9) 팀원 각자의 로컬 DB, 운영 EC2의 DB를 같은 상태로 맞출 방법이 필요했습니다.
+JPA의 `ddl-auto: update`로 엔티티에서 테이블을 자동 생성하는 대신 **Flyway로 스키마를 SQL 파일로 버전 관리**하고, Hibernate는 `validate`만 하도록 했습니다.
 
-핵심은 DB 안의 `flyway_schema_history` 장부 테이블입니다.
+**왜 `ddl-auto`가 아니라 Flyway인가**
 
-1. backend(Spring)가 기동하면 Flyway가 먼저 실행됩니다
-2. jar 안에 든 마이그레이션 파일 목록(`backend/src/main/resources/db/migration/V*.sql`)과 장부를 대조합니다
-3. **장부에 없는 버전만** 번호 순서대로 실행하고, 실행할 때마다 장부에 기록합니다
+- `ddl-auto: update`는 컬럼 추가는 해주지만 컬럼 삭제·타입 변경·인덱스·시드 데이터는 처리하지 못하고, 누가 언제 무엇을 바꿨는지 기록이 남지 않습니다.
+- Flyway는 변경 이력을 **번호가 붙은 SQL 파일**로 남기고, 어떤 DB든 적용된 버전을 추적하므로 모든 환경이 같은 순서로 같은 상태에 도달합니다.
+- Spring Boot 공식 가이드도 Flyway 같은 마이그레이션 도구를 쓸 때는 `spring.jpa.hibernate.ddl-auto=validate`로 두고, 스키마 생성은 마이그레이션에 맡기도록 권장합니다.
 
-→ 누가 어떤 상태의 DB를 갖고 있든 `docker compose up`만 하면 최신 스키마로 수렴합니다.
+**이 프로젝트의 설정**
+
+```yaml
+# backend/src/main/resources/application.yml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Hibernate는 엔티티 ↔ 테이블 구조가 맞는지 검사만 한다
+  flyway:
+    enabled: true          # 기동 시 classpath:db/migration 의 V*.sql 을 자동 실행
+```
+
+```
+backend/src/main/resources/db/migration/
+├── V1__initial_schema.sql                                  테이블·인덱스 초기 생성
+├── V4__add_dashboard_report_index.sql                      대시보드 조회 인덱스
+├── V5__add_normalized_conversation_messages.sql            정규화 대화 메시지 테이블
+├── V6__seed_verified_support_resources.sql                 검수된 상담 리소스 시드
+├── V7__add_conversation_test_fixture_flag.sql              테스트 픽스처 플래그 컬럼
+├── V8__add_self_report_comparison_to_relationship_reports.sql
+└── V9__seed_relationship_counseling_resources.sql          관계 상담 리소스 시드
+```
+
+파일 이름 규칙은 `V<버전>__<설명>.sql` 입니다 — 접두사 `V`, 버전 번호, **언더스코어 두 개**, 설명. 버전은 숫자 순으로 정렬되어 실행되며, 중간에 비어 있는 번호(V2·V3)는 상관없습니다.
+
+**동작 원리 — `flyway_schema_history` 장부 테이블**
+
+Flyway는 대상 DB에 `flyway_schema_history` 테이블을 만들어 **어떤 마이그레이션을 언제, 누가 적용했는지와 파일의 체크섬**을 기록합니다.
+
+1. backend(Spring)가 기동하면 JPA `EntityManagerFactory`가 만들어지기 **전에** Flyway가 먼저 실행됩니다
+2. jar 안의 `db/migration/V*.sql` 목록과 장부를 대조합니다
+3. **장부에 없는 버전만** 번호 순서대로 실행하고, 한 파일이 끝날 때마다 장부에 한 줄씩 기록합니다 (각 마이그레이션은 정확히 한 번만 적용)
+4. 장부에 이미 있는 파일은 저장된 체크섬과 현재 파일의 체크섬을 비교해, 다르면 `Migration checksum mismatch` 로 기동을 **실패**시킵니다
+5. Flyway가 끝난 뒤 Hibernate가 `validate`로 엔티티와 실제 테이블이 일치하는지 확인합니다
+
+```sql
+-- 현재 DB에 적용된 버전 확인
+SELECT installed_rank, version, description, checksum, installed_on, success
+  FROM flyway_schema_history ORDER BY installed_rank;
+```
+
+→ 누가 어떤 상태의 DB를 갖고 있든 `docker compose up`만 하면 최신 스키마로 수렴합니다. 새로 합류한 팀원은 V1부터 V9까지 전부, 이미 V7까지 적용된 운영 DB는 V8·V9만 실행됩니다.
+
+**스키마를 바꿀 때 실제로 하는 일**
+
+```sql
+-- 예: V8__add_self_report_comparison_to_relationship_reports.sql
+ALTER TABLE relationship_reports
+    ADD COLUMN self_report_comparison VARCHAR(2000) NOT NULL DEFAULT '';
+```
+
+1. 가장 큰 버전 + 1 번호로 `V10__설명.sql` 파일을 추가한다 (기존 파일은 건드리지 않는다)
+2. JPA 엔티티도 같은 구조로 수정한다 — 안 맞으면 `validate`가 기동을 막아준다
+3. `docker compose up -d --build backend` → Flyway가 V10만 적용하고 장부에 기록한다
+4. 기존 데이터가 있는 테이블에 `NOT NULL` 컬럼을 추가할 때는 `DEFAULT`를 꼭 붙인다 (V7·V8 참고)
+
+**주의할 점**
+
+- **이미 적용된 마이그레이션 파일은 절대 수정하지 않는다.** 체크섬이 달라져 모든 환경에서 기동이 실패합니다. 고칠 게 있으면 새 버전 파일로 되돌리거나 덮어씁니다. (로컬에서만 실수했다면 `docker compose down -v`로 DB를 지우고 다시 올리는 게 가장 빠릅니다)
+- 한 번 배포된 버전보다 **작은 번호**의 파일을 나중에 추가하면 기본 설정에서는 무시되거나 validate 에러가 납니다 (`outOfOrder` 기본값 false). 번호는 항상 뒤에 붙입니다.
+- 시드 데이터(V6·V9)도 마이그레이션으로 넣어서, 모든 환경에 같은 상담 리소스 목록이 들어가도록 했습니다.
+
+참고: [Flyway — Versioned migrations](https://documentation.red-gate.com/fd/versioned-migrations-273973333.html) · [Spring Boot — Use a Higher-level Database Migration Tool](https://docs.spring.io/spring-boot/how-to/data-initialization.html)
 
 ## 트러블슈팅
 
@@ -159,67 +222,6 @@ cp .env.example .env          # 그대로 두면 카카오 로그인 + AI stub �
 docker compose up -d --build  # DB + 백엔드 + AI + 프론트 전부 기동 (첫 빌드 수 분)
 docker compose ps             # 5개 서비스가 healthy/running 이면 준비 완료
 ```
-
-그 다음 http://localhost:5173 으로 접속합니다. **로그인은 반드시 5173으로 들어가세요.**
-
-| 주소 | 내용 |
-|---|---|
-| http://localhost:5173 | 프론트엔드 |
-| http://localhost:8080/actuator/health | 백엔드 헬스체크 |
-| http://localhost:5173/api/v1/auth/kakao/authorize | 카카오 로그인 진입 |
-
-실제 AI 분석을 켜려면 `.env`에서 `AI_MODE=http`, `GOOGLE_API_KEY=<Gemini 키>`로 바꾸고 `docker compose up -d backend ai`.
-
-| 서비스 | 포트 | 용도 |
-|---|---|---|
-| front | 5173 | Vite 개발 서버 (`/api`·`/oauth2`는 backend로 프록시, 소스 bind mount → HMR) |
-| backend | 8080 | Spring Boot API. 코드 수정 시 `docker compose up -d --build backend` |
-| ai | (내부 8000) | FastAPI 분석 서버. backend만 `http://ai:8000`으로 호출 |
-| postgres | 5432 | 애플리케이션 DB (Flyway가 스키마 생성) |
-| mongo | 27017 | 상담 메시지 저장 |
-
-```bash
-docker compose down           # 정지 (데이터 유지)
-docker compose down -v        # 데이터까지 삭제
-```
-
-### 환경변수
-
-`.env`는 커밋되지 않으며 compose가 읽어 컨테이너에 주입합니다. 값을 바꿨으면 재기동해야 반영됩니다.
-
-| 변수 | 용도 |
-|---|---|
-| `KAKAO_CLIENT_ID` / `KAKAO_CLIENT_SECRET` | 카카오 **REST API 키**(JavaScript 키 아님) / Client Secret — 서버 전용 비밀값 |
-| `FRONTEND_BASE_URL` | 로그인 성공 후 돌아갈 주소 (기본 `http://localhost:5173`) |
-| `AI_MODE` | `stub`(더미 결과, 기본) 또는 `http`(ai 컨테이너 실제 호출) |
-| `AI_SERVICE_TOKEN` | 백엔드 ↔ ai 내부 토큰. compose가 양쪽에 같은 값을 주입 |
-| `GOOGLE_API_KEY` | Gemini API 키. `AI_MODE=http`일 때 필수 |
-| `DB_URL` / `MONGODB_URI` / `AI_BASE_URL` | 컨테이너 실행 시 compose가 서비스 이름 기준으로 덮어씀. 호스트에서 직접 실행할 때만 사용 |
-
-### 카카오 개발자 콘솔
-
-| 위치 | 할 일 |
-|---|---|
-| 앱 설정 > 앱 키 | **REST API 키** 복사 |
-| 앱 설정 > 플랫폼 > Web | `http://localhost:5173`, `http://localhost:8080`, `https://ktb-ai-hackathon-team14.com` 등록 |
-| 제품 설정 > 카카오 로그인 | 활성화 ON, 동의항목: 닉네임·프로필 사진 |
-| 제품 설정 > 카카오 로그인 > Redirect URI | `{오리진}/api/v1/auth/kakao/callback` — 5173 · 8080 · 배포 도메인 세 개 모두 등록 |
-
-### 배포
-
-```bash
-cp .env.prod.example .env   # FRONTEND_BASE_URL=https://..., SESSION_COOKIE_SECURE=true, GOOGLE_API_KEY
-docker compose -f compose.yaml -f compose.prod.yaml up -d --build
-```
-
-아키텍처 · AWS 리소스 설정값 · 배포 후 검증 체크리스트는 **[DEPLOYMENT.md](./DEPLOYMENT.md)** 를 참고하세요.
-
-## 더 읽을 것
-
-- [`backend/README.md`](./backend/README.md) — 백엔드 패키지 구조와 설계 원칙
-- [`ai/README.md`](./ai/README.md) — AI 분석 서버 파이프라인 구조와 API
-- [`backend/docs/AI_INTERNAL_API_SPEC.md`](./backend/docs/AI_INTERNAL_API_SPEC.md) — 백엔드 ↔ AI 내부 계약
-- [`DEPLOYMENT.md`](./DEPLOYMENT.md) — EC2 1대 + ALB(ACM) + Route53 배포 가이드
 
 ## 회고
 
