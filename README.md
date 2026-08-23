@@ -21,16 +21,7 @@
 | 결과 | 예선 통과 → **본선 8팀 선정 진출** |
 | 타겟 | 연인·친구·가족·직장동료와의 관계에 고민이 있거나, 관계 유지에 피로감을 느끼는 사람 |
 
-### 팀원
 
-| 이름 | 역할 |
-|---|---|
-| Whale.lim | AI |
-| Ella.byun | AI |
-| woo.lee | 풀스택 |
-| russell.kang | 풀스택 |
-| lulu.roh | 클라우드 |
-| **scarlett.kim** | **클라우드** — 카카오 소셜 로그인 · 인프라/배포 · DB 마이그레이션 *(이 README 작성자)* |
 
 ## 동작 영상
 
@@ -78,21 +69,8 @@ flowchart TB
     AI -. LLM .-> GEMINI[Gemini]
 ```
 
-- 외부로 열리는 포트는 front(nginx)의 80뿐. DB·백엔드·AI는 컨테이너 네트워크 안에만 존재합니다.
-- TLS는 **ALB에서 ACM 인증서로 종료**하고 EC2는 평문 80만 받습니다. EC2 안에 인증서를 두지 않습니다.
-- 분석 요청은 `POST /relationships/{id}/analyses` → 202 즉시 응답 → 백엔드 Worker가 카카오톡 원본을 정규화(NDJSON, gzip)해 AI 서버를 동기 호출 → 프론트는 `GET /analysis-jobs/{jobId}` 폴링.
 
-```
-KTB-AI-hacker-toon/
-├── compose.yaml        로컬 전체 실행 스택 (PostgreSQL · MongoDB · backend · ai · front)
-├── compose.prod.yaml   EC2 배포 오버레이 (포트 닫기 · nginx 정적 빌드 · 메모리 제한)
-├── .env.example        로컬 환경변수 템플릿  /  .env.prod.example  배포용
-├── backend/            Spring Boot API + Flyway 마이그레이션
-├── ai/                 FastAPI 분석 서버
-├── front/              React + Vite
-├── docs/demo/          동작 영상 (gif · mp4)
-└── DEPLOYMENT.md       AWS 배포 가이드
-```
+
 
 ## 프로젝트 기여 (scarlett.kim · 클라우드)
 
